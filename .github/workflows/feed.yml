@@ -61,20 +61,3 @@ jobs:
       - if: steps.gate.outputs.run_now == 'true'
         name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v4
-
-      # E-mail ved fejl (Office 365/SMTP)
-      - name: Send failure email (SMTP)
-        if: failure()
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: ${{ secrets.SMTP_SERVER }}
-          server_port: ${{ secrets.SMTP_PORT }}
-          username: ${{ secrets.SMTP_USERNAME }}
-          password: ${{ secrets.SMTP_PASSWORD }}
-          subject: "[GG FEED] Build FAILED: ${{ github.repository }}"
-          from: ${{ secrets.MAIL_FROM }}
-          to: ${{ secrets.MAIL_TO }}
-          content_type: text/plain
-          body: |
-            Repo: ${{ github.repository }}
-            Run:  ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
