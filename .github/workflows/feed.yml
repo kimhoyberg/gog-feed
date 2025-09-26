@@ -31,9 +31,10 @@ jobs:
           python - <<'PY'
           from datetime import datetime
           from zoneinfo import ZoneInfo
+          import os
           now = datetime.now(ZoneInfo("Europe/Copenhagen"))
-          run_now = (now.hour == 12) or ("workflow_dispatch" in "${{ github.event_name }}")
-          with open("${{ github.output }}".upper(), "a") as f:
+          run_now = (now.hour == 12) or ("${{ github.event_name }}" == "workflow_dispatch")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write(f"run_now={'true' if run_now else 'false'}\n")
           print("Local time:", now.isoformat(), "run_now:", run_now)
           PY
