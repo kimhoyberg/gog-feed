@@ -12,6 +12,7 @@ AD_TYPE = "Sælges"
 # Tilpas disse hvis dine CSV-kolonner hedder noget andet
 CSV_COLUMNS = {
     "id": "Slug",
+    "draft": ":draft",
     "model": "Model",
     "year": "År",
     "price": "Pris",
@@ -83,6 +84,9 @@ def build_xml(rows):
     root = etree.Element("ads")
     errors = []
     for i, r in enumerate(rows, start=2):
+        is_draft = (r.get(CSV_COLUMNS["draft"]) or "").strip().lower()
+        if is_draft == "true":
+            continue
         ad_id = (r.get(CSV_COLUMNS["id"]) or "").strip()
         if not ad_id:
             errors.append(f"Row {i}: missing id/Slug")
