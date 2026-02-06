@@ -13,6 +13,7 @@ AD_TYPE = "Sælges"
 CSV_COLUMNS = {
     "id": "Slug",
     "draft": ":draft",
+    "type": "Type",
     "model": "Model",
     "year": "År",
     "price": "Pris",
@@ -84,9 +85,18 @@ def build_xml(rows):
     root = etree.Element("ads")
     errors = []
     for i, r in enumerate(rows, start=2):
+        
+        # --- FILTER 1: SPRING DRAFTS OVER ---
         is_draft = (r.get(CSV_COLUMNS["draft"]) or "").strip().lower()
         if is_draft == "true":
             continue
+
+        # --- FILTER 2: KUN CAMPINGVOGNE ---
+        # Dette sikrer at fortelte, teltvogne osv. ikke kommer med
+        vogn_type = (r.get(CSV_COLUMNS["type"]) or "").strip()
+        if vogn_type != "Campingvogn":
+            continue
+
         ad_id = (r.get(CSV_COLUMNS["id"]) or "").strip()
         if not ad_id:
             errors.append(f"Row {i}: missing id/Slug")
