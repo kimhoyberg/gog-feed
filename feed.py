@@ -84,7 +84,16 @@ def build_text(row):
 def build_xml(rows):
     root = etree.Element("ads")
     errors = []
+    print(f"--- SCRIPT LOGGER: Starter behandling af {len(rows)} rækker fra CSV ---")
+    
     for i, r in enumerate(rows, start=2):
+
+        ad_id = (r.get(CSV_COLUMNS["id"]) or "").strip()
+        vogn_type = (r.get(CSV_COLUMNS["type"]) or "").strip()
+        
+        # Denne linje vil fortælle dig i GitHub Actions loggen præcis hvad scriptet ser:
+        if ad_id:
+            print(f"Behandler række {i}: ID={ad_id}, Type={vogn_type}")
         
         # --- FILTER 1: SPRING DRAFTS OVER ---
         is_draft = (r.get(CSV_COLUMNS["draft"]) or "").strip().lower()
