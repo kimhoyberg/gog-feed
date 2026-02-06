@@ -1,8 +1,11 @@
 name: Build & publish GulogGratis XML
 
 on:
+  push:
+    paths:
+      - 'cms.csv'          # Kører med det samme når du uploader CSV
+      - 'feed.py'
   schedule:
-    # Runs every 4 hours
     - cron: '0 */4 * * *'
   workflow_dispatch: {}
 
