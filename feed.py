@@ -164,9 +164,16 @@ def build_xml(rows):
     return etree.ElementTree(root), errors
 
 def main():
+    import shutil # Tilføj denne import i toppen af filen
+    
     rows = read_rows(CSV_PATH)
     xml_tree, errors = build_xml(rows)
+    
+    # Slet mappen hvis den findes, og opret den på ny
+    if os.path.exists("public"):
+        shutil.rmtree("public")
     os.makedirs("public", exist_ok=True)
+    
     out = "public/feed.xml"
     xml_tree.write(out, encoding="utf-8", xml_declaration=True, pretty_print=True)
 
