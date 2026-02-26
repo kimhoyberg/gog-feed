@@ -10,16 +10,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+
+      # DETTE TRIN MANGLER SANDSYNLIGVIS ELLER ER FORKERT:
       - name: Install dependencies
-        run: pip install requests beautifulsoup4 lxml
+        run: |
+          pip install requests beautifulsoup4 lxml
+
       - name: Run script
         run: python feed.py
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./public
