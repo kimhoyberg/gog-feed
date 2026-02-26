@@ -1,46 +1,25 @@
-name: Build & publish GulogGratis XML
-
+name: Update XML Feed
 on:
-  push:
-    paths:
-      - 'cms.csv'          # Kører med det samme når du uploader CSV
-      - 'feed.py'
   schedule:
-    - cron: '0 */4 * * *'
-  workflow_dispatch: {}
-
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-env:
-  TZ: Europe/Copenhagen
-  CSV_PATH: cms.csv
-  CATEGORY_PATH: /camping/campingvogn
-  BASE_URL: https://viborg-caravancenter.dk/campingvogne
+    - cron: '0 * * * *' # Kører hver time
+  workflow_dispatch: # Giver dig en knap til at starte den manuelt
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-
-      - name: Install deps
-        run: pip install -r requirements.txt
-
-      - name: Generate XML
+          python-version: '3.10'
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4 lxml
+      - name: Run script
         run: python feed.py
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: ./public
-
       - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
