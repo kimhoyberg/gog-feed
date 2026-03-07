@@ -75,25 +75,25 @@ def fetch_data(url):
                 "stand": stand, "tilbehoer": tilbehoer, "images": [],
             }
 
-    # Tilknyt billeder: find img-tags pr. produkt via HTML-struktur
-    # Hvert produkt er i en container — vi finder den container der indeholder sluggen som tekst
-    # og høster img-tags fra netop den container
-    visited_slugs = set()
-    for tag in soup.find_all(True):
-        tag_text = tag.get_text()
+    # Tilknyt billeder via <a href="/campingvogne/slug"> — præcis og unik matching
+    for a_tag in soup.find_all('a', href=True):
+        href = a_tag.get('href', '')
         for slug_val, ad in ads_dict.items():
-            if slug_val in visited_slugs:
+            if ad['images']:
                 continue
-            if slug_val in tag_text.lower():
-                imgs = [
-                    img.get('src', '')
-                    for img in tag.find_all('img')
-                    if 'framerusercontent' in img.get('src', '')
-                ]
+            if f'/campingvogne/{slug_val}' in href:
+                container = a_tag.parent
+                imgs = []
+                while container and not imgs:
+                    imgs = [
+                        img.get('src', '')
+                        for img in container.find_all('img')
+                        if 'framerusercontent' in img.get('src', '')
+                    ]
+                    container = container.parent
                 if imgs:
                     ad['images'] = imgs[:6]
-                    visited_slugs.add(slug_val)
-                    break
+                break
 
     return list(ads_dict.values())
 
