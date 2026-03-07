@@ -8,7 +8,8 @@ from bs4 import BeautifulSoup
 DATA_URL = "https://viborg-caravancenter.dk/data-eksport"
 BASE_URL = "https://viborg-caravancenter.dk"
 
-ALLOWED_BRANDS = ["Adria", "Bürstner", "Dethleffs", "Hobby", "Knaus", "LMC", "Tabbert", "Fendt", "Hymer", "Kabe", "Sprite", "Sterckeman", "Caravelair"]
+ALLOWED_BRANDS = ["Adria", "Bürstner", "Dethleffs", "Hobby", "Knaus", "LMC", "Tabbert",
+                  "Fendt", "Hymer", "Kabe", "Sprite", "Sterckeman", "Caravelair", "Cabby", "Wilk"]
 
 def clean_number(val):
     if not val: return "0"
@@ -22,78 +23,87 @@ def detect_brand(model_str):
             return brand
     return "Andet mærke"
 
+def fetch_product_images(page, slug):
+    """Hent billeder fra den individuelle produktside."""
+    url = f"{BASE_URL}/campingvogne/{slug}"
+    try:
+        page.goto(url, wait_until="networkidle", timeout=20000)
+        html = page.content()
+        soup = BeautifulSoup(html, 'html.parser')
+        imgs = []
+        for img in soup.find_all('img'):
+            src = img.get('src', '')
+            if 'framerusercontent' in src and src not in imgs:
+                imgs.append(src)
+        return imgs[:6]
+    except Exception as e:
+        print(f"  Fejl ved {slug}: {e}", file=sys.stderr)
+        return []
+
 def fetch_data(url):
+    slug_pattern = re.compile(r'^[a-zæøå0-9][a-zæøå0-9\-]{3,}$')
+
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page()
+
+        # Hent data-eksport siden
+        print("Henter data-eksport...", file=sys.stderr)
         page.goto(url, wait_until="networkidle")
         html = page.content()
-        browser.close()
 
-    soup = BeautifulSoup(html, 'html.parser')
-    lines = [l.strip() for l in soup.get_text(separator='\n').splitlines() if l.strip()]
+        soup = BeautifulSoup(html, 'html.parser')
+        lines = [l.strip() for l in soup.get_text(separator='\n').splitlines() if l.strip()]
 
-    slug_pattern = re.compile(r'^[a-zæøå0-9][a-zæøå0-9\-]{3,}$')
+        # Find produktstartpositioner: slug efterfulgt af "Campingvogn"
+        product_starts = []
+        for i in range(len(lines) - 1):
+            if slug_pattern.match(lines[i]) and lines[i+1].lower() == 'campingvogn':
+                product_starts.append(i)
 
-    # Find produktstartpositioner: en slug efterfulgt af "Campingvogn" på næste linje
-    product_starts = []
-    for i in range(len(lines) - 1):
-        if slug_pattern.match(lines[i]) and lines[i+1].lower() == 'campingvogn':
-            product_starts.append(i)
+        ads_dict = {}
+        for idx, start in enumerate(product_starts):
+            end = product_starts[idx + 1] if idx + 1 < len(product_starts) else len(lines)
+            block = lines[start:end]
 
-    ads_dict = {}
-    for idx, start in enumerate(product_starts):
-        # Slutningen af dette produkt er starten på næste (eller slutningen af listen)
-        end = product_starts[idx + 1] if idx + 1 < len(product_starts) else len(lines)
-        block = lines[start:end]
-
-        if len(block) < 8:
-            continue
-
-        slug_val   = block[0].lower()
-        type_val   = block[1]
-        model_name = block[2]
-        year       = block[3]
-        price      = block[4]
-        own        = block[5]
-        total      = block[6]
-        stand      = block[7]
-
-        # Tilbehør: alt efter felt 8, minus URLs og "Sælges"
-        tilbehoer_parts = []
-        for line in block[8:]:
-            if line.startswith('http') or line in ['Sælges', 'Købes']:
+            if len(block) < 8:
                 continue
-            tilbehoer_parts.append(re.sub(r'^✅\s*', '', line).strip())
 
-        tilbehoer = ', '.join(t for t in tilbehoer_parts if t)
+            slug_val   = block[0].lower()
+            type_val   = block[1]
+            model_name = block[2]
+            year       = block[3]
+            price      = block[4]
+            own        = block[5]
+            total      = block[6]
+            stand      = block[7]
 
-        if slug_val not in ads_dict:
-            ads_dict[slug_val] = {
-                "slug": slug_val, "type_val": type_val, "model_name": model_name,
-                "year": year, "price": price, "own": own, "total": total,
-                "stand": stand, "tilbehoer": tilbehoer, "images": [],
-            }
+            # Tilbehør: linjer efter felt 8, stop ved første slug (næste produkt lækker ind)
+            tilbehoer_parts = []
+            for line in block[8:]:
+                if line.startswith('http') or line in ['Sælges', 'Købes']:
+                    continue
+                # Stop hvis vi rammer en slug (næste produkts slug er lækket ind)
+                if slug_pattern.match(line) and line != slug_val:
+                    break
+                tilbehoer_parts.append(re.sub(r'^✅\s*', '', line).strip())
 
-    # Tilknyt billeder via <a href="/campingvogne/slug"> — præcis og unik matching
-    for a_tag in soup.find_all('a', href=True):
-        href = a_tag.get('href', '')
+            tilbehoer = ', '.join(t for t in tilbehoer_parts if t)
+
+            if slug_val not in ads_dict:
+                ads_dict[slug_val] = {
+                    "slug": slug_val, "type_val": type_val, "model_name": model_name,
+                    "year": year, "price": price, "own": own, "total": total,
+                    "stand": stand, "tilbehoer": tilbehoer, "images": [],
+                }
+
+        # Hent billeder fra individuelle produktsider
+        print(f"Henter billeder for {len(ads_dict)} produkter...", file=sys.stderr)
         for slug_val, ad in ads_dict.items():
-            if ad['images']:
-                continue
-            if f'/campingvogne/{slug_val}' in href:
-                container = a_tag.parent
-                imgs = []
-                while container and not imgs:
-                    imgs = [
-                        img.get('src', '')
-                        for img in container.find_all('img')
-                        if 'framerusercontent' in img.get('src', '')
-                    ]
-                    container = container.parent
-                if imgs:
-                    ad['images'] = imgs[:6]
-                break
+            print(f"  {slug_val}", file=sys.stderr)
+            ad['images'] = fetch_product_images(page, slug_val)
+
+        browser.close()
 
     return list(ads_dict.values())
 
@@ -147,7 +157,7 @@ def build_xml(rows):
     return etree.ElementTree(root)
 
 def main():
-    print("Henter data med Playwright...", file=sys.stderr)
+    print("Starter feed-generering...", file=sys.stderr)
     data = fetch_data(DATA_URL)
     print(f"Fandt {len(data)} produkter.", file=sys.stderr)
     if data:
