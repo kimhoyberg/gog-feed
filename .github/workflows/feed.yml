@@ -16,10 +16,18 @@ jobs:
         with:
           python-version: '3.10'
 
-      # DETTE TRIN MANGLER SANDSYNLIGVIS ELLER ER FORKERT:
       - name: Install dependencies
         run: |
-          pip install requests beautifulsoup4 lxml
+          pip install requests beautifulsoup4 lxml playwright
+          playwright install chromium --with-deps
 
       - name: Run script
         run: python feed.py
+
+      - name: Commit and push feed.xml
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add public/feed.xml
+          git diff --cached --quiet || git commit -m "Update feed.xml"
+          git push
