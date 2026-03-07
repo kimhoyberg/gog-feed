@@ -22,6 +22,11 @@ def detect_brand(model_str):
             return brand
     return "Andet mærke"
 
+def parse_html_to_text(html_str):
+    """Konverterer HTML-streng til ren tekst uden tags."""
+    soup = BeautifulSoup(html_str, 'html.parser')
+    return soup.get_text(separator=' ', strip=True)
+
 def fetch_data(url):
     with sync_playwright() as p:
         browser = p.chromium.launch()
@@ -31,49 +36,104 @@ def fetch_data(url):
         browser.close()
 
     soup = BeautifulSoup(html, 'html.parser')
-    all_text = [t.get_text().strip() for t in soup.find_all(['p', 'span']) if t.get_text().strip()]
 
-    # Slugs er lowercase og indeholder kun bogstaver, tal og bindestreger
-    slug_pattern = re.compile(r'^[a-zæøå0-9][a-zæøå0-9\-]+$')
+    # Find alle "Article"-containere — hver svarer til ét produkt
+    # Framer renderer hver artikel som en selvstændig container
+    # Vi finder dem via slug-mønsteret i teksten
+    slug_pattern = re.compile(r'^[a-zæøå0-9][a-zæøå0-9\-]{3,}$')
+    image_pattern = re.compile(r'https://framerusercontent\.com/\S+')
+
+    # Hent al tekst og img-tags pr. "blok" ved at parse den fulde tekst
+    full_text = soup.get_text(separator='\n')
+    lines = [l.strip() for l in full_text.splitlines() if l.strip()]
+
+    # Find alle framerusercontent billed-URLs fra img-tags
+    all_images_in_page = []
+    for img in soup.find_all('img'):
+        src = img.get('src', '')
+        if 'framerusercontent' in src:
+            all_images_in_page.append(src)
 
     ads_dict = {}
     i = 0
-    while i < len(all_text):
-        slug = all_text[i].lower()
+    while i < len(lines):
+        slug = lines[i].lower()
         if not slug_pattern.match(slug):
             i += 1
             continue
 
-        if i + 8 > len(all_text):
+        # De 8 faste felter
+        if i + 8 > len(lines):
             break
 
-        chunk_fixed = all_text[i:i+8]
+        chunk = lines[i:i+8]
+        slug_val      = chunk[0].lower()
+        type_val      = chunk[1]
+        model_name    = chunk[2]
+        year          = chunk[3]
+        price         = chunk[4]
+        own           = chunk[5]
+        total         = chunk[6]
+        stand         = chunk[7]
 
-        # Tilbehør: saml alle efterfølgende linjer indtil næste slug
+        # Tilbehør: saml linjer efter de 8 faste felter indtil næste slug
         tilbehoer_parts = []
         j = i + 8
-        while j < len(all_text):
-            next_val = all_text[j]
+        while j < len(lines):
+            next_val = lines[j]
             if slug_pattern.match(next_val.lower()) and len(next_val) > 3:
                 break
+            # Spring billed-URLs og produktlinks over
+            if image_pattern.match(next_val) or next_val.startswith('http') or next_val.startswith('/camping'):
+                j += 1
+                continue
+            # Spring "Sælges" over
+            if next_val in ['Sælges', 'Købes']:
+                j += 1
+                continue
             tilbehoer_parts.append(next_val)
             j += 1
 
         tilbehoer = ', '.join(
             re.sub(r'^✅\s*', '', t).strip()
             for t in tilbehoer_parts
-            if t.strip()
+            if t.strip() and not t.startswith('http')
         )
 
-        if slug not in ads_dict:
-            ads_dict[slug] = {
-                "slug": slug, "type_val": chunk_fixed[1], "model_name": chunk_fixed[2],
-                "year": chunk_fixed[3], "price": chunk_fixed[4], "own": chunk_fixed[5],
-                "total": chunk_fixed[6], "stand": chunk_fixed[7],
+        if slug_val not in ads_dict:
+            ads_dict[slug_val] = {
+                "slug": slug_val,
+                "type_val": type_val,
+                "model_name": model_name,
+                "year": year,
+                "price": price,
+                "own": own,
+                "total": total,
+                "stand": stand,
                 "tilbehoer": tilbehoer,
             }
 
         i = j
+
+    # Tilknyt billeder til produkter baseret på rækkefølge i HTML
+    # Find img-tags grupperet efter deres position relativt til slug-tekst
+    # Enklere: brug img-tags direkte fra HTML i den rækkefølge de optræder
+    # og match dem til produkter via produktets link-URL i siden
+    for ad_id, ad in ads_dict.items():
+        ad['images'] = []
+
+    # Find billeder pr. produkt ved at søge i HTML-strukturen
+    # Hvert produkt har sine billeder samlet i en container
+    # Vi finder containers der indeholder slug-teksten
+    for container in soup.find_all(True):
+        text_content = container.get_text()
+        for ad_id, ad in ads_dict.items():
+            if ad_id in text_content.lower() and not ad['images']:
+                imgs = container.find_all('img')
+                urls = [img.get('src','') for img in imgs if 'framerusercontent' in img.get('src','')]
+                if urls:
+                    ad['images'] = urls[:6]
+                    break
 
     return list(ads_dict.values())
 
@@ -101,6 +161,12 @@ def build_xml(rows):
         etree.SubElement(ad, "type").text = "Sælges"
         etree.SubElement(ad, "link").text = f"{BASE_URL}/campingvogne/{r['slug']}"
         etree.SubElement(ad, "category").text = "/camping/campingvogn"
+
+        # Billeder
+        if r.get('images'):
+            images_el = etree.SubElement(ad, "images")
+            for img_url in r['images']:
+                etree.SubElement(images_el, "image").text = img_url
 
         cf = etree.SubElement(ad, "categoryfields")
         brand = detect_brand(model_clean)
