@@ -24,18 +24,31 @@ def detect_brand(model_str):
     return "Andet mærke"
 
 def fetch_product_images(page, slug):
-    """Hent billeder fra den individuelle produktside."""
+    """Hent billeder fra den individuelle produktside med scroll for lazy-load."""
     url = f"{BASE_URL}/campingvogne/{slug}"
     try:
-        page.goto(url, wait_until="networkidle", timeout=20000)
-        html = page.content()
-        soup = BeautifulSoup(html, 'html.parser')
-        imgs = []
-        for img in soup.find_all('img'):
-            src = img.get('src', '')
-            if 'framerusercontent' in src and src not in imgs:
-                imgs.append(src)
-        return imgs[:6]
+        page.goto(url, wait_until="networkidle", timeout=30000)
+        # Scroll ned for at trigge lazy-loading af billeder
+        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        page.wait_for_timeout(1500)
+        page.evaluate("window.scrollTo(0, 0)")
+        page.wait_for_timeout(500)
+
+        # Brug JavaScript til at finde alle framerusercontent billeder direkte i DOM
+        img_srcs = page.evaluate("""() => {
+            const imgs = Array.from(document.querySelectorAll('img'));
+            const seen = new Set();
+            const result = [];
+            for (const img of imgs) {
+                const src = img.src || img.getAttribute('src') || '';
+                if (src.includes('framerusercontent') && !seen.has(src)) {
+                    seen.add(src);
+                    result.push(src);
+                }
+            }
+            return result;
+        }""")
+        return img_srcs[:6]
     except Exception as e:
         print(f"  Fejl ved {slug}: {e}", file=sys.stderr)
         return []
@@ -78,14 +91,17 @@ def fetch_data(url):
             total      = block[6]
             stand      = block[7]
 
-            # Tilbehør: linjer efter felt 8, stop ved første slug (næste produkt lækker ind)
+            # Tilbehør: stop ved første fremmede slug ELLER ved "Campingvogn" (start på nyt produkt)
             tilbehoer_parts = []
-            for line in block[8:]:
-                if line.startswith('http') or line in ['Sælges', 'Købes']:
-                    continue
-                # Stop hvis vi rammer en slug (næste produkts slug er lækket ind)
+            for i, line in enumerate(block[8:]):
+                # Stop hvis vi rammer en slug der ikke er vores egen
                 if slug_pattern.match(line) and line != slug_val:
                     break
+                # Stop hvis vi rammer "Campingvogn" der er efterfulgt af et modelnavn (nyt produkt)
+                if line.lower() == 'campingvogn':
+                    break
+                if line.startswith('http') or line in ['Sælges', 'Købes']:
+                    continue
                 tilbehoer_parts.append(re.sub(r'^✅\s*', '', line).strip())
 
             tilbehoer = ', '.join(t for t in tilbehoer_parts if t)
@@ -97,11 +113,13 @@ def fetch_data(url):
                     "stand": stand, "tilbehoer": tilbehoer, "images": [],
                 }
 
-        # Hent billeder fra individuelle produktsider
+        # Hent billeder fra individuelle produktsider med scroll/JS
         print(f"Henter billeder for {len(ads_dict)} produkter...", file=sys.stderr)
         for slug_val, ad in ads_dict.items():
             print(f"  {slug_val}", file=sys.stderr)
-            ad['images'] = fetch_product_images(page, slug_val)
+            imgs = fetch_product_images(page, slug_val)
+            print(f"    -> {len(imgs)} billeder fundet", file=sys.stderr)
+            ad['images'] = imgs
 
         browser.close()
 
