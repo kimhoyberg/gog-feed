@@ -1,2 +1,5 @@
 lxml==5.2.2
 python-dateutil==2.9.0.post0
+playwright
+beautifulsoup4
+requests
