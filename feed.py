@@ -156,7 +156,7 @@ def build_xml(rows):
         parts = [r['tilbehoer']] if r['tilbehoer'] else []
         if r.get('yderligere'):
             parts.append(r['yderligere'])
-        description = '  '.join(parts) if parts else f"Flot {model_clean} fra {year}. Kontakt os for mere information eller fremvisning."
+        description = '\n'.join(parts) if parts else f"Flot {model_clean} fra {year}. Kontakt os for mere information eller fremvisning."
         etree.SubElement(ad, "text").text = description
 
         etree.SubElement(ad, "price").text = clean_number(r['price'])
