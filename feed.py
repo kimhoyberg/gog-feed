@@ -150,9 +150,10 @@ def build_xml(rows):
         etree.SubElement(ad, "link").text = f"{BASE_URL}/campingvogne/{r['slug']}"
         etree.SubElement(ad, "category").text = "/camping/campingvogn"
 
-        if r.get('images'):
+        real_images = [u for u in r.get('images', []) if not u.lower().endswith('.svg')]
+        if real_images:
             images_el = etree.SubElement(ad, "images")
-            for img_url in r['images']:
+            for img_url in real_images:
                 etree.SubElement(images_el, "image").text = img_url
 
         cf = etree.SubElement(ad, "categoryfields")
