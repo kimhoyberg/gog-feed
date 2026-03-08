@@ -4,6 +4,11 @@ on:
     - cron: '0 * * * *' # Kører hver time
   workflow_dispatch: # Giver dig en knap til at starte den manuelt
 
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -31,3 +36,19 @@ jobs:
           git add public/feed.xml
           git diff --cached --quiet || git commit -m "Update feed.xml"
           git push
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public/
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
