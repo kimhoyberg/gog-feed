@@ -91,26 +91,37 @@ def fetch_data(url):
             total      = block[6]
             stand      = block[7]
 
-            # Tilbehør: stop ved første fremmede slug ELLER ved "Campingvogn" (start på nyt produkt)
+            # Tilbehør og yderligere oplysninger: adskilt af "##"
             tilbehoer_parts = []
-            for i, line in enumerate(block[8:]):
-                # Stop hvis vi rammer en slug der ikke er vores egen
+            yderligere_parts = []
+            after_separator = False
+            for line in block[8:]:
                 if slug_pattern.match(line) and line != slug_val:
                     break
-                # Stop hvis vi rammer "Campingvogn" der er efterfulgt af et modelnavn (nyt produkt)
                 if line.lower() == 'campingvogn':
                     break
                 if line.startswith('http') or line in ['Sælges', 'Købes']:
                     continue
-                tilbehoer_parts.append(re.sub(r'^✅\s*', '', line).strip())
+                if line.strip() == '##':
+                    after_separator = True
+                    continue
+                clean = re.sub(r'^✅\s*', '', line).strip()
+                if not clean:
+                    continue
+                if after_separator:
+                    yderligere_parts.append(clean)
+                else:
+                    tilbehoer_parts.append(clean)
 
-            tilbehoer = ', '.join(t for t in tilbehoer_parts if t)
+            tilbehoer = ', '.join(tilbehoer_parts)
+            yderligere = ' '.join(yderligere_parts)
 
             if slug_val not in ads_dict:
                 ads_dict[slug_val] = {
                     "slug": slug_val, "type_val": type_val, "model_name": model_name,
                     "year": year, "price": price, "own": own, "total": total,
-                    "stand": stand, "tilbehoer": tilbehoer, "images": [],
+                    "stand": stand, "tilbehoer": tilbehoer, "yderligere": yderligere,
+                    "images": [],
                 }
 
         # Hent billeder fra individuelle produktsider med scroll/JS
@@ -142,7 +153,10 @@ def build_xml(rows):
             headline += f" {year}"
         etree.SubElement(ad, "headline").text = headline
 
-        description = r['tilbehoer'] if r['tilbehoer'] else f"Flot {model_clean} fra {year}. Kontakt os for mere information eller fremvisning."
+        parts = [r['tilbehoer']] if r['tilbehoer'] else []
+        if r.get('yderligere'):
+            parts.append(r['yderligere'])
+        description = '  '.join(parts) if parts else f"Flot {model_clean} fra {year}. Kontakt os for mere information eller fremvisning."
         etree.SubElement(ad, "text").text = description
 
         etree.SubElement(ad, "price").text = clean_number(r['price'])
