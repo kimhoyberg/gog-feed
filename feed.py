@@ -54,7 +54,7 @@ def fetch_product_images(page, slug):
         return []
 
 def fetch_data(url):
-    slug_pattern = re.compile(r'^[a-zæøå0-9][a-zæøå0-9\-]{3,}$')
+    slug_pattern = re.compile(r'^[a-zæøåü0-9][a-zæøåü0-9\-]{3,}$')
 
     with sync_playwright() as p:
         browser = p.chromium.launch()
